@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>三省六部制 Multi-Agent 系统</title>
+<style>
+  :root {
+    --gold: #c8a84b;
+    --dark-gold: #8b6914;
+    --red: #8b0000;
+    --bg: #1a1208;
+    --panel: #2a1f0e;
+    --border: #5a4020;
+    --text: #e8d5a3;
+    --muted: #8a7050;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: "Microsoft YaHei", "Noto Serif SC", serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* 顶栏 */
+  header {
+    background: linear-gradient(135deg, #2a1500, #4a2800);
+    border-bottom: 2px solid var(--gold);
+    padding: 12px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  header .title { font-size: 22px; color: var(--gold); letter-spacing: 4px; }
+  header .subtitle { font-size: 12px; color: var(--muted); }
+  header .status-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: #2ecc71; margin-left: auto;
+    box-shadow: 0 0 6px #2ecc71;
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+  /* 主布局 */
+  .main {
+    display: grid;
+    grid-template-columns: 280px 1fr 300px;
+    gap: 0;
+    flex: 1;
+    overflow: hidden;
+    height: calc(100vh - 58px);
+  }
+
+  /* 侧边栏 */
+  .sidebar {
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    padding: 16px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .section-title {
+    color: var(--gold);
+    font-size: 13px;
+    letter-spacing: 3px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 6px;
+    margin-bottom: 8px;
+  }
+
+  /* 官署卡片 */
+  .dept-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+  .dept-card {
+    background: rgba(200,168,75,0.08);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px;
+    text-align: center;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all .2s;
+  }
+  .dept-card:hover { border-color: var(--gold); background: rgba(200,168,75,0.15); }
+  .dept-card.active { border-color: var(--gold); background: rgba(200,168,75,0.2); }
+  .dept-card .emoji { font-size: 20px; display: block; margin-bottom: 4px; }
+  .dept-card .name { color: var(--gold); font-weight: bold; }
+  .dept-card .role { color: var(--muted); font-size: 10px; margin-top: 2px; }
+  .dept-card.province { grid-column: span 2; }
+
+  /* LLM 选择 */
+  .llm-panel select, .llm-panel input {
+    width: 100%;
+    background: #1a1208;
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 8px;
+    border-radius: 4px;
+    margin-bottom: 6px;
+    font-size: 12px;
+  }
+  .llm-panel button {
+    width: 100%;
+    background: var(--dark-gold);
+    color: var(--text);
+    border: 1px solid var(--gold);
+    padding: 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: background .2s;
+  }
+  .llm-panel button:hover { background: var(--gold); color: #1a1208; }
+  #current-llm { font-size: 11px; color: var(--muted); margin-top: 4px; text-align: center; }
+
+  /* 聊天区域 */
+  .chat-area {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .chat-messages::-webkit-scrollbar { width: 6px; }
+  .chat-messages::-webkit-scrollbar-track { background: var(--bg); }
+  .chat-messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .msg { display: flex; gap: 12px; max-width: 80%; }
+  .msg.user { flex-direction: row-reverse; align-self: flex-end; }
+  .msg.system { align-self: flex-start; }
+  .msg .avatar {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: var(--panel); border: 2px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; flex-shrink: 0;
+  }
+  .msg.user .avatar { border-color: var(--gold); }
+  .msg .bubble {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    line-height: 1.6;
+    font-size: 14px;
+  }
+  .msg.user .bubble { background: #2a1800; border-color: var(--gold); }
+  .msg .meta { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  /* 输入框 */
+  .chat-input-area {
+    border-top: 1px solid var(--border);
+    padding: 12px 16px;
+    background: var(--panel);
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+  }
+  .chat-input-area textarea {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px;
+    border-radius: 6px;
+    resize: none;
+    font-size: 14px;
+    font-family: inherit;
+    min-height: 44px;
+    max-height: 120px;
+  }
+  .chat-input-area textarea:focus { outline: none; border-color: var(--gold); }
+  .send-btn {
+    background: var(--red);
+    color: #e8d5a3;
+    border: 1px solid #c00;
+    padding: 10px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-family: inherit;
+    letter-spacing: 2px;
+    transition: background .2s;
+    height: 44px;
+  }
+  .send-btn:hover { background: #b00000; }
+  .send-btn:disabled { background: var(--muted); cursor: not-allowed; }
+
+  /* 右侧流程面板 */
+  .flow-panel {
+    background: var(--panel);
+    border-left: 1px solid var(--border);
+    padding: 16px;
+    overflow-y: auto;
+  }
+
+  .flow-item {
+    display: flex;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(90,64,32,.4);
+    font-size: 12px;
+    animation: fadeIn .3s ease;
+  }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:none} }
+  .flow-item .badge {
+    background: rgba(200,168,75,.15);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 2px 6px;
+    white-space: nowrap;
+    color: var(--gold);
+    font-size: 11px;
+  }
+  .flow-item .flow-content { color: var(--muted); flex: 1; word-break: break-all; }
+  .flow-item .type-badge {
+    font-size: 10px;
+    padding: 1px 4px;
+    border-radius: 2px;
+    background: rgba(139,0,0,.3);
+    color: #e88;
+    border: 1px solid #600;
+  }
+
+  .thinking { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; padding: 4px 0; }
+  .dots span { animation: blink 1.2s infinite; display: inline-block; }
+  .dots span:nth-child(2) { animation-delay: .4s; }
+  .dots span:nth-child(3) { animation-delay: .8s; }
+  @keyframes blink { 0%,100%{opacity:.2} 50%{opacity:1} }
+
+  .empty-hint { text-align: center; color: var(--muted); font-size: 13px; padding: 40px 20px; }
+
+  /* 响应式 */
+  @media (max-width: 900px) {
+    .main { grid-template-columns: 1fr; }
+    .sidebar, .flow-panel { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="title">⚙ 三省六部制 Multi-Agent</div>
+    <div class="subtitle">中书省 · 门下省 · 尚书省 · 吏户礼兵刑工</div>
+  </div>
+  <div class="status-dot" id="status-dot" title="系统运行中"></div>
+</header>
+
+<div class="main">
+  <!-- 左侧：官署结构 + LLM配置 -->
+  <aside class="sidebar">
+    <div>
+      <div class="section-title">官 署 架 构</div>
+      <div class="dept-grid" id="dept-grid">
+        <div class="dept-card province active" data-name="zhongshu">
+          <span class="emoji">📜</span>
+          <div class="name">中书省</div>
+          <div class="role">草拟诏令 · 分析意图</div>
+        </div>
+        <div class="dept-card province" data-name="menxia">
+          <span class="emoji">🔍</span>
+          <div class="name">门下省</div>
+          <div class="role">审核封驳 · 质量把关</div>
+        </div>
+        <div class="dept-card province" data-name="shangshu">
+          <span class="emoji">⚖️</span>
+          <div class="name">尚书省</div>
+          <div class="role">统领六部 · 汇总执行</div>
+        </div>
+        <div class="dept-card" data-name="libu"><span class="emoji">👤</span><div class="name">吏部</div><div class="role">Agent管理</div></div>
+        <div class="dept-card" data-name="hubu"><span class="emoji">📦</span><div class="name">户部</div><div class="role">数据资源</div></div>
+        <div class="dept-card" data-name="libu2"><span class="emoji">📨</span><div class="name">礼部</div><div class="role">格式输出</div></div>
+        <div class="dept-card" data-name="bingbu"><span class="emoji">⚔️</span><div class="name">兵部</div><div class="role">任务执行</div></div>
+        <div class="dept-card" data-name="xingbu"><span class="emoji">⚠️</span><div class="name">刑部</div><div class="role">安全审查</div></div>
+        <div class="dept-card" data-name="gongbu"><span class="emoji">🔧</span><div class="name">工部</div><div class="role">搜索调用</div></div>
+      </div>
+    </div>
+
+    <div class="llm-panel">
+      <div class="section-title">切 换 LLM</div>
+      <select id="llm-provider">
+        <option value="openai">OpenAI (GPT-4o等)</option>
+        <option value="claude">Anthropic Claude</option>
+        <option value="qwen">阿里通义千问</option>
+        <option value="wenxin">百度文心一言</option>
+        <option value="gemini">Google Gemini</option>
+        <option value="ollama">Ollama 本地模型</option>
+        <option value="mock" selected>Mock (测试)</option>
+      </select>
+      <input type="text" id="llm-model" placeholder="模型名称 (如 gpt-4o)" />
+      <input type="password" id="llm-apikey" placeholder="API Key" />
+      <input type="text" id="llm-baseurl" placeholder="自定义 Base URL (可选)" />
+      <button onclick="switchLLM()">切 换</button>
+      <div id="current-llm">当前: Mock LLM</div>
+    </div>
+
+    <div>
+      <div class="section-title">IM 接 入</div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.8">
+        <div>📱 微信公众号: <code style="color:var(--gold)">/wechat</code></div>
+        <div>🐦 飞书机器人: <code style="color:var(--gold)">/feishu</code></div>
+        <div>📌 钉钉机器人: <code style="color:var(--gold)">/dingtalk</code></div>
+        <div>🌐 REST API: <a href="/docs" target="_blank" style="color:var(--gold)">/docs</a></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- 中间：聊天区域 -->
+  <div class="chat-area">
+    <div class="chat-messages" id="messages">
+      <div class="empty-hint">
+        🏛️ 三省六部制 Multi-Agent 系统<br><br>
+        您的请求将经过：<br>
+        <strong style="color:var(--gold)">中书省起草 → 门下省审核 → 尚书省调度六部执行</strong><br><br>
+        请在下方输入任务指令
+      </div>
+    </div>
+    <div class="chat-input-area">
+      <textarea id="input" placeholder="向三省六部发出指令..." rows="2"
+        onkeydown="if(event.ctrlKey&&event.key==='Enter')sendMsg()"></textarea>
+      <button class="send-btn" id="send-btn" onclick="sendMsg()">奏 对</button>
+    </div>
+  </div>
+
+  <!-- 右侧：消息流 -->
+  <div class="flow-panel">
+    <div class="section-title">公 文 流 转</div>
+    <div id="flow-list">
+      <div class="empty-hint" style="padding:20px 0">等待请求...</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let thinking = false;
+
+async function sendMsg() {
+  const input = $('input');
+  const text = input.value.trim();
+  if (!text || thinking) return;
+
+  input.value = '';
+  addMsg('user', text, '👤', '您');
+  clearEmptyHint();
+  setThinking(true);
+  clearFlowHint();
+
+  // 开始轮询流程
+  const pollInterval = setInterval(pollFlow, 1000);
+
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({message: text, user_id: 'web_user'})
+    });
+    const data = await res.json();
+    addMsg('system', data.reply, '🏛️', '三省六部');
+  } catch(e) {
+    addMsg('system', '❌ 请求失败: ' + e.message, '⚠️', '系统');
+  } finally {
+    setThinking(false);
+    clearInterval(pollInterval);
+    await pollFlow();
+  }
+}
+
+function addMsg(type, content, icon, name) {
+  const wrap = $('messages');
+  // 移除空提示
+  const hint = wrap.querySelector('.empty-hint');
+  if (hint) hint.remove();
+
+  // 移除thinking
+  const t = wrap.querySelector('.thinking');
+  if (t) t.remove();
+
+  const div = document.createElement('div');
+  div.className = `msg ${type}`;
+  div.innerHTML = `
+    <div class="avatar">${icon}</div>
+    <div>
+      <div class="bubble">${escHtml(content)}</div>
+      <div class="meta">${name} · ${new Date().toLocaleTimeString()}</div>
+    </div>
+  `;
+  wrap.appendChild(div);
+
+  if (type === 'system' && thinking) {
+    const thinkDiv = document.createElement('div');
+    thinkDiv.className = 'thinking';
+    thinkDiv.id = 'thinking';
+    thinkDiv.innerHTML = '⏳ 三省六部正在处理 <span class="dots"><span>.</span><span>.</span><span>.</span></span>';
+    wrap.appendChild(thinkDiv);
+  }
+
+  wrap.scrollTop = wrap.scrollHeight;
+}
+
+function setThinking(val) {
+  thinking = val;
+  $('send-btn').disabled = val;
+  $('send-btn').textContent = val ? '处理中...' : '奏 对';
+
+  const wrap = $('messages');
+  const existing = $('thinking');
+  if (val && !existing) {
+    const div = document.createElement('div');
+    div.id = 'thinking';
+    div.className = 'thinking';
+    div.innerHTML = '⏳ 三省六部正在处理 <span class="dots"><span>.</span><span>.</span><span>.</span></span>';
+    wrap.appendChild(div);
+    wrap.scrollTop = wrap.scrollHeight;
+  } else if (!val && existing) {
+    existing.remove();
+  }
+}
+
+function clearEmptyHint() {
+  const h = $('messages').querySelector('.empty-hint');
+  if (h) h.remove();
+}
+
+function clearFlowHint() {
+  $('flow-list').innerHTML = '';
+}
+
+let lastFlowCount = 0;
+async function pollFlow() {
+  try {
+    const res = await fetch('/api/history?limit=30');
+    const msgs = await res.json();
+    if (msgs.length === lastFlowCount) return;
+    lastFlowCount = msgs.length;
+
+    const list = $('flow-list');
+    list.innerHTML = '';
+    msgs.slice(-20).forEach(m => {
+      const div = document.createElement('div');
+      div.className = 'flow-item';
+      const typeColor = {task:'#e88',result:'#8e8',review:'#88e',approval:'#e8e',execute:'#ee8',report:'#8ee'}[m.type] || '#aaa';
+      div.innerHTML = `
+        <span class="badge">${m.sender}→${m.receiver}</span>
+        <div>
+          <span class="type-badge" style="color:${typeColor}">${m.type}</span>
+          <div class="flow-content">${escHtml(m.content.substring(0, 60))}${m.content.length>60?'...':''}</div>
+        </div>
+      `;
+      list.appendChild(div);
+    });
+    list.scrollTop = list.scrollHeight;
+  } catch(e) {}
+}
+
+async function switchLLM() {
+  const provider = $('llm-provider').value;
+  const model = $('llm-model').value;
+  const apiKey = $('llm-apikey').value;
+  const baseUrl = $('llm-baseurl').value;
+
+  try {
+    const res = await fetch('/api/llm/switch', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({provider, model, api_key: apiKey, base_url: baseUrl})
+    });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      $('current-llm').textContent = '当前: ' + data.llm;
+      $('current-llm').style.color = '#2ecc71';
+    } else {
+      alert('切换失败: ' + (data.detail || '未知错误'));
+    }
+  } catch(e) {
+    alert('切换失败: ' + e.message);
+  }
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+}
+
+// 初始化
+async function init() {
+  try {
+    const res = await fetch('/api/status');
+    const data = await res.json();
+    if (data.status === 'running') {
+      $('current-llm').textContent = '当前: ' + data.llm;
+      $('status-dot').title = `运行中 · ${data.message_count} 条消息`;
+    }
+  } catch(e) {}
+}
+init();
+setInterval(pollFlow, 3000);
+</script>
+</body>
+</html>
