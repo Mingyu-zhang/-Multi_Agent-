@@ -1,6 +1,7 @@
 # 三省六部制 Multi-Agent 框架
 
 > 🏛️ 以中国古代**三省六部制**为架构的多Agent系统，支持任意LLM后端，可通过微信、飞书等IM软件交互。
+<img width="2840" height="1708" alt="屏幕截图 2026-03-25 214230" src="https://github.com/user-attachments/assets/307f567a-791e-42b2-a7b9-40025a86aa1b" />
 
 ---
 
